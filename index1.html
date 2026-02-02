@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vuoi uscire mamacita?</title>
+  <style>
+    :root{
+      --pink:#ffb6c1;
+      --red:#ff5454;
+      --green:#2ec06f;
+      --text:#3a1f2b;
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    body{
+      background: linear-gradient(180deg, var(--pink) 0%, #ffc9d9 100%);
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      overflow:hidden;
+      transition: background-color 400ms ease;
+      position:relative; /* to position hearts */
+    }
+
+    /* ensure the content is above the hearts so clicks never get blocked */
+    .card{
+      text-align:center;
+      max-width:900px;
+      width:100%;
+      position:relative;
+      z-index:2;
+      pointer-events:auto;
+    }
+
+    h1{
+      font-size: clamp(2.2rem, 6vw, 5.5rem);
+      margin:0 0 20px 0;
+      letter-spacing: -1px;
+      font-weight:800;
+      color:#4b1130;
+      text-shadow: 0 2px 0 rgba(255,255,255,0.2);
+    }
+
+    .actions{
+      display:flex;
+      gap:18px;
+      justify-content:center;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    button{
+      cursor:pointer;
+      border:0;
+      padding:18px 30px;
+      font-size:1.15rem;
+      border-radius:999px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+      transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, opacity 220ms ease;
+      display:inline-flex;
+      gap:10px;
+      align-items:center;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button:active{ transform: translateY(2px) scale(0.98); }
+    button:focus{ outline:3px solid rgba(255,255,255,0.25); outline-offset:4px; }
+
+    .btn-green{
+      background: linear-gradient(180deg, #34d07b 0%, var(--green) 100%);
+      color:white;
+      font-weight:700;
+      min-width:150px;
+      transform-origin:center;
+    }
+
+    .btn-red{
+      background: linear-gradient(180deg,#ff6b79 0%, #ff3b5a 100%);
+      color:white;
+      font-weight:700;
+      min-width:150px;
+    }
+
+    /* Heart overlay (behind content so it won't block clicks) */
+    .hearts {
+      position: absolute;
+      inset: 0;
+      overflow: visible;
+      z-index:1;
+      pointer-events: none; /* ensure hearts never intercept clicks */
+    }
+
+    .heart {
+      position: absolute;
+      font-size: 20px;
+      will-change: transform, opacity;
+      animation-name: floatUp, sway;
+      animation-iteration-count: 1;
+      animation-timing-function: ease-out;
+      opacity: 0;
+      transform: translateY(0);
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.18));
+      pointer-events: none; /* extra safety so children also don't catch events */
+      user-select: none;
+    }
+
+    @keyframes floatUp {
+      0%   { transform: translateY(20vh) scale(0.9); opacity: 0; }
+      10%  { opacity: 1; }
+      100% { transform: translateY(-120vh) scale(1.25); opacity: 0; }
+    }
+
+    @keyframes sway {
+      0% { transform: translateX(0); }
+      50% { transform: translateX(30px); }
+      100% { transform: translateX(-20px); }
+    }
+
+    /* When red-mode is active, change background */
+    body.red-mode{
+      background: radial-gradient(circle at 10% 30%, #ff7b88 0%, var(--red) 30%, #c91f3a 100%);
+      transition: background-color 400ms ease, background 600ms ease;
+      color: #fff;
+    }
+
+    /* small hint */
+    .hint{
+      margin-top:18px;
+      font-size:0.95rem;
+      color: rgba(0,0,0,0.45);
+    }
+    body.red-mode .hint{ color: rgba(255,255,255,0.9); }
+
+    @media (max-width:420px){
+      .actions{ gap:12px; }
+      button{ padding:14px 18px; font-size:1rem; min-width:120px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card" role="main" aria-labelledby="main-title">
+    <h1 id="main-title">vuoi uscire mamacita?</h1>
+
+    <div class="actions" role="group" aria-label="Risposte">
+      <!-- IMPORTANT: type="button" prevents accidental form submission in contexts where this file
+           might be embedded inside a form -->
+      <button id="yesBtn" type="button" class="btn-green" aria-pressed="false" aria-label="Sì, sii">sii✨</button>
+      <button id="noBtn" type="button" class="btn-red" aria-pressed="false" aria-label="No, no">no😔</button>
+    </div>
+
+  <div id="heartsContainer" class="hearts" aria-hidden="true"></div>
+
+  <script>
+    (function(){
+      const yesBtn = document.getElementById('yesBtn');
+      const noBtn = document.getElementById('noBtn');
+      const heartsContainer = document.getElementById('heartsContainer');
+      const body = document.body;
+
+      let noCount = 0;
+      const maxNo = 7;
+      let heartInterval = null;
+      let alreadyRed = false;
+
+      // Utility: spawn a single heart with random properties
+      function createHeart() {
+        const span = document.createElement('span');
+        span.className = 'heart';
+        span.innerText = (Math.random() > 0.4) ? '❤️' : (Math.random() > 0.5 ? '💖' : '💘');
+
+        // horizontal start between 0% and 100% of viewport width
+        const left = Math.random() * 100;
+        const startTop = 80 + Math.random() * 15; // start from near bottom so they float up nicely
+        const size = 14 + Math.random() * 36; // px
+        const delay = Math.random() * 600; // ms
+        const duration = 1800 + Math.random() * 2200; // ms
+        const swayDuration = 800 + Math.random() * 1600;
+
+        span.style.left = left + 'vw';
+        span.style.top = startTop + 'vh';
+        span.style.fontSize = size + 'px';
+        span.style.animationDuration = duration + 'ms, ' + swayDuration + 'ms';
+        span.style.animationDelay = delay + 'ms';
+        span.style.opacity = '0';
+
+        heartsContainer.appendChild(span);
+
+        // remove after the animations complete (duration + delay + small buffer)
+        const total = duration + delay + 300;
+        const toRemove = setTimeout(() => {
+          span.remove();
+          clearTimeout(toRemove);
+        }, total);
+      }
+
+      // spawn a small burst immediately (n hearts)
+      function spawnBurst(n = 18) {
+        for (let i = 0; i < n; i++) {
+          // stagger creation slightly so animation timing feels natural
+          setTimeout(createHeart, i * 45 + Math.random() * 120);
+        }
+      }
+
+      // When "sii" clicked: set red-mode and create ongoing hearts
+      yesBtn.addEventListener('click', () => {
+        // Prevent repeated setup
+        if (!alreadyRed) {
+          body.classList.add('red-mode');
+          spawnBurst(30); // initial burst
+          // create a gentle continuous stream of hearts
+          heartInterval = setInterval(() => spawnBurst(4), 900);
+          alreadyRed = true;
+          yesBtn.setAttribute('aria-pressed', 'true');
+        } else {
+          // if already active, give another cute burst
+          spawnBurst(12);
+        }
+      });
+
+      // When "no" clicked: grow the green button and hide red after 7 presses
+      noBtn.addEventListener('click', () => {
+        noCount++;
+        noBtn.setAttribute('aria-pressed', 'true');
+
+        // scale green button up progressively
+        const scale = 1 + 0.12 * noCount;
+        // Use transform scale only — don't combine with translate here
+        yesBtn.style.transform = `scale(${scale})`;
+
+        // visually emphasize the red button as it's clicked
+        noBtn.animate([
+          { transform: 'translateY(0) scale(1)' },
+          { transform: 'translateY(-6px) scale(0.96)' },
+          { transform: 'translateY(0) scale(1)' }
+        ], { duration: 220, easing: 'ease-out' });
+
+        if (noCount >= maxNo) {
+          // stop responding and hide the button (fade + scale)
+          noBtn.disabled = true;
+          noBtn.animate([
+            { opacity: 1, transform: 'translateY(0) scale(1)' },
+            { opacity: 0, transform: 'translateY(-10px) scale(0.6)' }
+          ], { duration: 350, easing: 'ease-in', fill: 'forwards' });
+          // fully remove from layout after animation to avoid accidental focus
+          setTimeout(() => {
+            noBtn.style.display = 'none';
+          }, 370);
+        }
+      });
+
+      // Keyboard support: Enter and Space should activate buttons
+      [yesBtn, noBtn].forEach(btn => {
+        btn.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            btn.click();
+          }
+        });
+      });
+
+      // Clean up the interval if user navigates away (best-effort)
+      window.addEventListener('beforeunload', () => {
+        if (heartInterval) clearInterval(heartInterval);
+      });
+
+      // For debug: expose state in dev console if needed
+      window.__valentine = {
+        getNoCount: () => noCount,
+        isRed: () => alreadyRed,
+        stopHearts: () => { if (heartInterval) { clearInterval(heartInterval); heartInterval = null; } }
+      };
+    })();
+  </script>
+</body>
+</html>
